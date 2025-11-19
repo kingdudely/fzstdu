@@ -400,7 +400,7 @@ const rzfh = (dat: Uint8Array, w ? : Uint8Array | 1): number | DZstdState => {
 		// frame size bytes
 		const fsb = fcf ? (1 << fcf) : ss;
 		// frame source size
-		const fss = rb(dat, bt, fsb) + (((tonumber(fcf) === 1) && 256) ? 1 : 0);
+		const fss = rb(dat, bt, fsb) + ((tonumber(fcf) === 1) ? 256 : 0);
 		// window size
 		let ws = fss;
 		if (!ss) {
@@ -942,7 +942,7 @@ const cct = (bufs: Uint8Array[], ol: number) => {
  *            it will yield better performance.
  * @returns The decompressed data
  */
-export function decompress(data: buffer, decompressedSize ? : number) {
+export function decompress(data: buffer, decompressedSize? : number) {
 	let buf = typeIs(decompressedSize, "number") ? new Uint8Array(decompressedSize) : undefined;
 	let dat = new Uint8Array(data);
 	const bufs: Uint8Array[] = [],

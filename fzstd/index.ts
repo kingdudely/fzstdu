@@ -1,3 +1,19 @@
+function getn(t: unknown) {
+	throw 'make getn return #t';
+	return 0;
+}
+
+function toSigned(x: number) {
+	return x >= 0x80000000 ? x - 0x100000000 : x;
+}
+
+function toBuffer(x: TypedArray) {
+	const result = buffer.create(x.byteLength);
+	buffer.copy(result, 0, x.buffer, x.byteOffset, x.byteLength);
+	return result;
+}
+
+
 // Some numerical data is initialized as -1 even when it doesn't need initialization to help the JIT infer types
 type TypedArraySource = number | buffer | TypedArray | Array < number > ;
 
@@ -17,11 +33,6 @@ const bufferBySize: {
 		[buffer.readi32, buffer.writei32],
 	],
 };
-
-function getn(t: unknown) {
-	throw "implement getn";
-	return 0;
-}
 
 // ---- TypedArray base class ----
 class TypedArray {
@@ -371,16 +382,6 @@ interface DZstdState {
 	l: number;
 }
 
-function toSigned(x: number) {
-    return x >= 0x80000000 ? x - 0x100000000 : x
-}
-
-function toBuffer(x: TypedArray) {
-	const result = buffer.create(x.byteLength);
-	buffer.copy(result, 0, x.buffer, x.byteOffset, x.byteLength);
-	return result;
-}
-
 const rb = (d: Uint8Array, b: number, n: number) => { // buffer readbits
 	let o = 0;
 	for (const i of $range(0, n - 1)) o |= d[b++] << (i << 3);
@@ -390,20 +391,20 @@ const rb = (d: Uint8Array, b: number, n: number) => { // buffer readbits
 
 // apply a dictionary to decompressor state
 const rdic = (dic: Uint8Array, st: DZstdState) => {
-  if (rb(dic, 0, 4) === 0xec30a437) {
-    if (st.d && st.d !== rb(dic, 4, 4)) throw 'wrong dictionary';
-    let bt = 8;
-    [bt, st.h] = rhu(dic, bt);
-    let mlt: FSEDT, olt: FSEDT, llt: FSEDT;
-    [bt, olt] = rfse(dic, bt, 8);
-    [bt, mlt] = rfse(dic, bt, 9);
-    [bt, llt] = rfse(dic, bt, 9);
-    st.t = [mlt, olt, llt];
-    st.o = new i32([rb(dic, bt, 4), rb(dic, bt + 4, 4), rb(dic, bt + 8, 4)]);
-    dic = dic.subarray(bt + 12);
-  }
-  st.w = dic.slice();
-  st.e = getn(dic);
+	if (rb(dic, 0, 4) === 0xec30a437) {
+		if (st.d && st.d !== rb(dic, 4, 4)) throw 'wrong dictionary';
+		let bt = 8;
+		[bt, st.h] = rhu(dic, bt);
+		let mlt: FSEDT, olt: FSEDT, llt: FSEDT;
+		[bt, olt] = rfse(dic, bt, 8);
+		[bt, mlt] = rfse(dic, bt, 9);
+		[bt, llt] = rfse(dic, bt, 9);
+		st.t = [mlt, olt, llt];
+		st.o = new i32([rb(dic, bt, 4), rb(dic, bt + 4, 4), rb(dic, bt + 8, 4)]);
+		dic = dic.subarray(bt + 12);
+	}
+	st.w = dic.slice();
+	st.e = getn(dic);
 };
 
 // read Zstandard frame header
@@ -413,10 +414,10 @@ const rzfh = (dat: Uint8Array, w ? : Uint8Array | 1): number | DZstdState => {
 		// Zstandard
 		const flg = dat[4];
 		//    single segment       checksum             dict flag     frame content flag
-		const ss = toSigned(toSigned(flg >> 5) & 1),
-			cc = toSigned(toSigned(flg >> 2) & 1),
-			df = toSigned(flg & 3),
-			fcf = toSigned(flg >> 6);
+		const ss = ((flg >> 5) & 1),
+			cc = ((flg >> 2) & 1),
+			df = (flg & 3),
+			fcf = (flg >> 6);
 		if (flg & 8) throw 'invalid zstd data';
 		// byte
 		let bt = 6 - ss;
@@ -426,15 +427,15 @@ const rzfh = (dat: Uint8Array, w ? : Uint8Array | 1): number | DZstdState => {
 		const di = rb(dat, bt, db);
 		bt += db;
 		// frame size bytes
-		const fsb = fcf ? toSigned(1 << fcf) : ss;
+		const fsb = fcf ? (1 << fcf) : ss;
 		// frame source size
 		const fss = rb(dat, bt, fsb) + ((tonumber(fcf) === 1) ? 256 : 0);
 		// window size
 		let ws = fss;
 		if (!ss) {
 			// window descriptor
-			const wb = toSigned(1 << (10 + toSigned(dat[5] >> 3)));
-			ws = toSigned(toSigned(wb) + toSigned((wb >> 3) * toSigned(dat[5] & 7)));
+			const wb = (1 << (10 + (dat[5] >> 3)));
+			ws = ((wb) + ((wb >> 3) * (dat[5] & 7)));
 		}
 		if (ws > 2145386496) throw 'window size too large (>2046MB)';
 		const buf = new u8((tonumber(w) === 1 ? (fss || ws) : w ? 0 : ws) + 12);
@@ -451,7 +452,7 @@ const rzfh = (dat: Uint8Array, w ? : Uint8Array | 1): number | DZstdState => {
 			c: cc,
 			m: math.min(131072, ws)
 		};
-	} else if (tonumber((toSigned(n3 >> 4) | toSigned(dat[3] << 20))) === 0x184D2A5) {
+	} else if (tonumber(((n3 >> 4) | (dat[3] << 20))) === 0x184D2A5) {
 		// skippable
 		return rb(dat, 4, 4) + 8; // buffer.readu32(dat.buffer, 4) + 8; // b4(dat, 4) + 8;
 	}
@@ -461,19 +462,19 @@ const rzfh = (dat: Uint8Array, w ? : Uint8Array | 1): number | DZstdState => {
 // most significant bit for nonzero
 const msb = (val: number) => {
 	let bits = 0;
-	while ((toSigned(1 << bits)) <= val) bits++
+	while (((1 << bits)) <= val) bits++
 	return bits - 1;
 };
 
 // read finite state entropy
 const rfse = (dat: Uint8Array, bt: number, mal: number): [number, FSEDT] => {
 	// table pos
-	let tpos = toSigned(bt << 3) + 4;
+	let tpos = (bt << 3) + 4;
 	// accuracy log
-	const al = toSigned((dat[bt] & 15)) + 5;
+	const al = ((dat[bt] & 15)) + 5;
 	if (al > mal) throw 'FSE accuracy too high';
 	// size
-	const sz = toSigned(1 << al);
+	const sz = (1 << al);
 	// probabilities symbols  repeat   index   high threshold
 	let probs = sz,
 		sym = -1,
@@ -481,30 +482,30 @@ const rfse = (dat: Uint8Array, bt: number, mal: number): [number, FSEDT] => {
 		i = -1,
 		ht = sz;
 	// optimization: single allocation is much faster
-	const buf = buffer.create(512 + (toSigned(sz) << 2));
+	const buf = buffer.create(512 + ((sz) << 2));
 	const freq = new i16(buf, 0, 256);
 	// same view as freq
 	const dstate = new u16(buf, 0, 256);
 	const nstate = new u16(buf, 512, sz);
-	const bb1 = 512 + (toSigned(sz) << 1);
+	const bb1 = 512 + ((sz) << 1);
 	const syms = new u8(buf, bb1, sz);
 	const nbits = new u8(buf, bb1 + sz);
 	while (sym < 255 && probs > 0) {
-		const bits = msb(toSigned(probs + 1));
-		const cbt = toSigned(tpos) >> 3;
+		const bits = msb((probs + 1));
+		const cbt = (tpos) >> 3;
 		// mask
-		const msk = toSigned((1 << (toSigned(bits + 1))) - 1);
-		let val = toSigned(toSigned(rb(dat, cbt, 3) >> toSigned(tpos & 7)) & msk);
+		const msk = ((1 << ((bits + 1))) - 1);
+		let val = ((rb(dat, cbt, 3) >> (tpos & 7)) & msk);
 		// mask (1 fewer bit)
-		const msk1fb = toSigned((1 << bits) - 1);
+		const msk1fb = ((1 << bits) - 1);
 		// max small value
-		const msv = toSigned(toSigned(msk) - toSigned(probs) - 1);
+		const msv = ((msk) - (probs) - 1);
 		// small value
-		const sval = toSigned(val & msk1fb);
+		const sval = (val & msk1fb);
 		if (sval < msv) tpos += bits, val = sval;
 		else {
-			tpos += toSigned(bits + 1);
-			if (toSigned(val) > toSigned(msk1fb)) val = toSigned(val) - toSigned(msv);
+			tpos += (bits + 1);
+			if ((val) > (msk1fb)) val = (val) - (msv);
 		}
 		freq[++sym] = --val;
 		if (tonumber(val) === -1) {
@@ -514,8 +515,8 @@ const rfse = (dat: Uint8Array, bt: number, mal: number): [number, FSEDT] => {
 		if (!val) {
 			do {
 				// repeat byte
-				const rbt = toSigned(tpos) >> 3;
-				re = toSigned(toSigned(rb(dat, rbt, 2) >> toSigned(tpos & 7)) & 3);
+				const rbt = (tpos) >> 3;
+				re = ((rb(dat, rbt, 2) >> (tpos & 7)) & 3);
 				tpos += 2;
 				sym += re;
 			} while (tonumber(re) === 3);
@@ -524,9 +525,9 @@ const rfse = (dat: Uint8Array, bt: number, mal: number): [number, FSEDT] => {
 	if (sym > 255 || probs) throw 'invalid zstd data';
 	let sympos = 0;
 	// sym step (coprime with sz - formula from zstd source)
-	const sstep = toSigned((sz >> 1) + (sz >> 3) + 3);
+	const sstep = ((sz >> 1) + (sz >> 3) + 3);
 	// sym mask
-	const smask = toSigned(sz - 1);
+	const smask = (sz - 1);
 	for (const s of $range(0, sym)) { // let s = 0; s <= sym; ++s
 		const sf = freq[s];
 		if (sf < 1) {
@@ -538,7 +539,7 @@ const rfse = (dat: Uint8Array, bt: number, mal: number): [number, FSEDT] => {
 			i = n;
 			syms[sympos] = s;
 			do {
-				sympos = toSigned(toSigned(sympos) + toSigned(sstep)) & smask
+				sympos = ((sympos) + (sstep)) & smask
 			} while (sympos >= ht)
 		}
 
@@ -550,11 +551,11 @@ const rfse = (dat: Uint8Array, bt: number, mal: number): [number, FSEDT] => {
 		// next state
 		const ns = dstate[syms[i]]++
 		// num bits
-		const nb = nbits[i] = toSigned(al - msb(ns))
-		nstate[i] = toSigned((ns << nb) - sz)
+		const nb = nbits[i] = (al - msb(ns))
+		nstate[i] = ((ns << nb) - sz)
 	}
 
-	return [(toSigned(tpos + 7) >> 3), {
+	return [((tpos + 7) >> 3), {
 		b: al,
 		s: syms,
 		n: nbits,
@@ -577,11 +578,11 @@ const rhu = (dat: Uint8Array, bt: number): [number, HDT] => {
 	// rank index
 	const ri = new u16(buf.buffer, 268);
 	// NOTE: at this point bt is 1 less than expected
-	if (toSigned(hb) < 128) {
+	if ((hb) < 128) {
 		// end byte, fse decode table
-		const [ebt, fdt] = rfse(dat, toSigned(bt + 1), 6);
+		const [ebt, fdt] = rfse(dat, (bt + 1), 6);
 		bt += hb;
-		const epos = toSigned(ebt << 3);
+		const epos = (ebt << 3);
 		// last byte
 		const lb = dat[bt];
 		if (!lb) throw 'invalid zstd data';
@@ -592,30 +593,30 @@ const rhu = (dat: Uint8Array, bt: number): [number, HDT] => {
 			btr2 = btr1;
 		// fse pos
 		// pre-increment to account for original deficit of 1
-		let fpos = (toSigned(++bt << 3) - 8 + msb(lb));
+		let fpos = ((++bt << 3) - 8 + msb(lb));
 		while (true) { // for(;;)
 			fpos -= btr1;
 			if (fpos < epos) break;
-			let cbt = toSigned(fpos) >> 3;
-			st1 += toSigned(toSigned(rb(dat, cbt, 2) >> toSigned(fpos & 7)) & ((toSigned(1 << btr1) - 1)));
+			let cbt = (fpos) >> 3;
+			st1 += ((rb(dat, cbt, 2) >> (fpos & 7)) & (((1 << btr1) - 1)));
 			hw[++wc] = fdt.s[st1];
 			fpos -= btr2;
 			if (fpos < epos) break;
-			cbt = toSigned(fpos) >> 3;
-			st2 += toSigned(toSigned(rb(dat, cbt, 2) >> toSigned(fpos & 7)) & ((toSigned(1 << btr2) - 1)));
+			cbt = (fpos) >> 3;
+			st2 += ((rb(dat, cbt, 2) >> (fpos & 7)) & (((1 << btr2) - 1)));
 			hw[++wc] = fdt.s[st2];
 			btr1 = fdt.n[st1];
 			st1 = fdt.t[st1];
 			btr2 = fdt.n[st2];
 			st2 = fdt.t[st2];
 		}
-		if (toSigned(++wc) > 255) throw 'invalid zstd data';
+		if ((++wc) > 255) throw 'invalid zstd data';
 	} else {
-		wc = toSigned(hb - 127);
+		wc = (hb - 127);
 		while (i < wc) {
 			const byte = dat[++bt];
-			hw[i] = toSigned(byte >> 4);
-			hw[i + 1] = toSigned(byte & 15);
+			hw[i] = (byte >> 4);
+			hw[i + 1] = (byte & 15);
 			i += 2;
 		}
 
@@ -629,26 +630,26 @@ const rhu = (dat: Uint8Array, bt: number): [number, HDT] => {
 		const wt = hw[i];
 		// bits must be at most 11, same as weight
 		if (wt > 11) throw 'invalid zstd data';
-		wes += wt && toSigned((1 << (toSigned(wt - 1))));
+		wes += wt && ((1 << ((wt - 1))));
 	}
 
 	// max bits
 	const mb = msb(wes) + 1;
 	// table size
-	const ts = toSigned(1 << mb);
+	const ts = (1 << mb);
 	// remaining sum
-	const rem = toSigned(ts - wes);
+	const rem = (ts - wes);
 	// must be power of 2
-	if (toSigned(rem) & toSigned(rem - 1)) throw 'invalid zstd data';
-	hw[wc++] = toSigned(msb(rem) + 1);
+	if ((rem) & (rem - 1)) throw 'invalid zstd data';
+	hw[wc++] = (msb(rem) + 1);
 	for (const n of $range(0, wc - 1)) {
 		i = n;
 		const wt = hw[i];
-		++rc[toSigned(hw[i] = wt && (toSigned(mb + 1 - wt)))];
+		++rc[(hw[i] = wt && ((mb + 1 - wt)))];
 	}
 
 	// huf buf
-	const hbuf = new u8(toSigned(ts << 1));
+	const hbuf = new u8((ts << 1));
 	//    symbols                      num bits
 	const syms = hbuf.subarray(0, ts),
 		nb = hbuf.subarray(ts);
@@ -656,7 +657,7 @@ const rhu = (dat: Uint8Array, bt: number): [number, HDT] => {
 	for (const n of $range(mb, 1, -1)) {
 		i = n;
 		const pv = ri[i];
-		nb.fill(i, pv, ri[i - 1] = toSigned(toSigned(pv) + toSigned(rc[i] * (toSigned(1 << (toSigned(mb - i)))))));
+		nb.fill(i, pv, ri[i - 1] = ((pv) + (rc[i] * ((1 << ((mb - i)))))));
 	}
 
 	if (tonumber(ri[0]) !== tonumber(ts)) throw 'invalid zstd data';
@@ -665,7 +666,7 @@ const rhu = (dat: Uint8Array, bt: number): [number, HDT] => {
 		const bits = hw[i];
 		if (bits) {
 			const code = ri[bits];
-			syms.fill(i, code, ri[bits] = toSigned(toSigned(code) + toSigned(1 << (toSigned(mb - bits)))));
+			syms.fill(i, code, ri[bits] = ((code) + (1 << ((mb - bits)))));
 		}
 	}
 	/*
@@ -708,7 +709,7 @@ const b2bl = (b: Uint8Array, s: number) => {
 		bl = new i32(len);
 	for (const i of $range(0, len - 1)) {
 		bl[i] = s;
-		s += toSigned(1 << b[i]);
+		s += (1 << b[i]);
 	}
 	return bl;
 };
@@ -734,17 +735,17 @@ const dhu = (dat: Uint8Array, out: Uint8Array, hu: HDT) => {
 	const len = getn(dat),
 		ss = getn(out),
 		lb = dat[len - 1],
-		msk = toSigned((1 << hu.b) - 1),
+		msk = ((1 << hu.b) - 1),
 		eb = -hu.b;
 	if (!lb) throw 'invalid zstd data';
 	let st = 0,
 		btr = hu.b,
-		pos = toSigned((len << 3) - 8 + msb(lb) - btr),
+		pos = ((len << 3) - 8 + msb(lb) - btr),
 		i = -1;
 	while (pos > eb && i < ss) { // for (; pos > eb && i < ss;)
-		const cbt = toSigned(pos >> 3);
-		const val = toSigned(rb(dat, cbt, 3) >> toSigned(pos & 7));
-		st = toSigned(toSigned(st << btr) | val) & msk;
+		const cbt = toSigned(bit32.arshift(pos, 3));
+		const val = (rb(dat, cbt, 3) >> (pos & 7));
+		st = ((st << btr) | val) & msk;
 		out[++i] = hu.s[st];
 		pos -= (btr = hu.n[st]);
 	}
@@ -756,9 +757,9 @@ const dhu = (dat: Uint8Array, out: Uint8Array, hu: HDT) => {
 const dhu4 = (dat: Uint8Array, out: Uint8Array, hu: HDT) => {
 	let bt = 6;
 	const ss = getn(out),
-		sz1 = toSigned((ss + 3) >> 2),
-		sz2 = toSigned(sz1 << 1),
-		sz3 = toSigned(sz1 + sz2);
+		sz1 = ((ss + 3) >> 2),
+		sz2 = (sz1 << 1),
+		sz3 = (sz1 + sz2);
 	dhu(dat.subarray(bt, bt += rb(dat, 0, 2)), out.subarray(0, sz1), hu);
 	dhu(dat.subarray(bt, bt += rb(dat, 2, 2)), out.subarray(sz1, sz2), hu);
 	dhu(dat.subarray(bt, bt += rb(dat, 4, 2)), out.subarray(sz2, sz3), hu);
@@ -770,9 +771,9 @@ const rzb = (dat: Uint8Array, st: DZstdState, out ? : Uint8Array) => {
 	let bt = st.b;
 	//    byte 0        block type
 	const b0 = dat[bt],
-		btype = toSigned(toSigned(b0 >> 1) & 3);
-	st.l = toSigned(b0 & 1);
-	const sz = toSigned((toSigned(b0 >> 3) | toSigned(dat[bt + 1] << 5) | toSigned(dat[bt + 2] << 13)));
+		btype = ((b0 >> 1) & 3);
+	st.l = (b0 & 1);
+	const sz = (((b0 >> 3) | (dat[bt + 1] << 5) | (dat[bt + 2] << 13)));
 	// end byte for block
 	const ebt = (bt += 3) + sz;
 	if (tonumber(btype) === 1) {
@@ -797,26 +798,26 @@ const rzb = (dat: Uint8Array, st: DZstdState, out ? : Uint8Array) => {
 	if (tonumber(btype) === 2) {
 		//    byte 3        lit btype     size format
 		const b3 = dat[bt],
-			lbt = toSigned(b3 & 3),
-			sf = toSigned((b3 >> 2) & 3);
+			lbt = (b3 & 3),
+			sf = ((b3 >> 2) & 3);
 		// lit src size  lit cmp sz 4 streams
-		let lss = toSigned(b3 >> 4),
+		let lss = (b3 >> 4),
 			lcs = 0,
 			s4 = 0;
 		if (lbt < 2) {
-			if (sf & 1) lss |= toSigned(toSigned(dat[++bt] << 4) | toSigned((sf & 2) && toSigned(dat[++bt] << 12)));
-			else lss = toSigned(b3 >> 3);
+			if (sf & 1) lss |= ((dat[++bt] << 4) | ((sf & 2) && (dat[++bt] << 12)));
+			else lss = (b3 >> 3);
 		} else {
 			s4 = sf;
-			if (sf < 2) lss |= toSigned(((dat[++bt] & 63) << 4)), lcs = toSigned(toSigned(dat[bt] >> 6) | toSigned(dat[++bt] << 2));
-			else if (tonumber(sf) === 2) lss |= toSigned(dat[++bt] << 4) | toSigned((dat[++bt] & 3) << 12), lcs = toSigned(toSigned(dat[bt] >> 2) | toSigned(dat[++bt] << 6));
-			else lss |= toSigned(dat[++bt] << 4) | toSigned((dat[++bt] & 63) << 12), lcs = toSigned(toSigned(dat[bt] >> 6) | toSigned(dat[++bt] << 2) | toSigned(dat[++bt] << 10));
+			if (sf < 2) lss |= (((dat[++bt] & 63) << 4)), lcs = ((dat[bt] >> 6) | (dat[++bt] << 2));
+			else if (tonumber(sf) === 2) lss |= (dat[++bt] << 4) | ((dat[++bt] & 3) << 12), lcs = ((dat[bt] >> 2) | (dat[++bt] << 6));
+			else lss |= (dat[++bt] << 4) | ((dat[++bt] & 63) << 12), lcs = ((dat[bt] >> 6) | (dat[++bt] << 2) | (dat[++bt] << 10));
 		}
 		++bt;
 		// add literals to end - can never overlap with backreferences because unused literals always appended
 		let buf = out ? out.subarray(st.y, st.y + st.m) : new u8(st.m);
 		// starting point for literals
-		let spl = toSigned(getn(buf) - lss);
+		let spl = (getn(buf) - lss);
 		if (tonumber(lbt) === 0) buf.set(dat.subarray(bt, bt += lss), spl);
 		else if (tonumber(lbt) === 1) buf.fill(dat[bt++], spl);
 		else {
@@ -825,7 +826,7 @@ const rzb = (dat: Uint8Array, st: DZstdState, out ? : Uint8Array) => {
 			if (tonumber(lbt) === 2) {
 				const hud = rhu(dat, bt);
 				// subtract description length
-				lcs += toSigned(bt - (bt = hud[0]));
+				lcs += (bt - (bt = hud[0]));
 				st.h = hu = hud[1];
 			} else if (!hu) throw 'invalid zstd data';
 			(s4 ? dhu4 : dhu)(dat.subarray(bt, bt += lcs), buf.subarray(spl), hu);
@@ -833,14 +834,14 @@ const rzb = (dat: Uint8Array, st: DZstdState, out ? : Uint8Array) => {
 		// num sequences
 		let ns = dat[bt++];
 		if (ns) {
-			if (tonumber(ns) === 255) ns = toSigned((dat[bt++] | toSigned(dat[bt++] << 8)) + 0x7F00);
-			else if (ns > 127) ns = toSigned(((ns - 128) << 8) | dat[bt++]);
+			if (tonumber(ns) === 255) ns = ((dat[bt++] | (dat[bt++] << 8)) + 0x7F00);
+			else if (ns > 127) ns = (((ns - 128) << 8) | dat[bt++]);
 			// symbol compression modes
 			const scm = dat[bt++];
-			if (toSigned(scm) & 3) throw 'invalid zstd data';
+			if ((scm) & 3) throw 'invalid zstd data';
 			const dts: [FSEDT, FSEDT, FSEDT] = [dmlt, doct, dllt];
 			for (const i of $range(2, 0, -1)) {
-				const md = toSigned((scm >> toSigned((i << 1) + 2)) & 3);
+				const md = ((scm >> ((i << 1) + 2)) & 3);
 				if (tonumber(md) === 1) {
 					// rle buf
 					const rbuf = new u8([0, 0, dat[bt++]]);
@@ -852,7 +853,7 @@ const rzb = (dat: Uint8Array, st: DZstdState, out ? : Uint8Array) => {
 					};
 				} else if (tonumber(md) === 2) {
 					// accuracy log 8 for offsets, 9 for others
-					[bt, dts[i]] = rfse(dat, bt, toSigned(9 - (i & 1)));
+					[bt, dts[i]] = rfse(dat, bt, (9 - (i & 1)));
 				} else if (tonumber(md) === 3) {
 					if (!st.t) throw 'invalid zstd data';
 					dts[i] = st.t[i];
@@ -861,14 +862,14 @@ const rzb = (dat: Uint8Array, st: DZstdState, out ? : Uint8Array) => {
 			const [mlt, oct, llt] = st.t = dts;
 			const lb = dat[ebt - 1];
 			if (!lb) throw 'invalid zstd data';
-			let spos = toSigned((ebt << 3) - 8 + msb(lb) - llt.b),
-				cbt = toSigned(spos >> 3),
+			let spos = ((ebt << 3) - 8 + msb(lb) - llt.b),
+				cbt = (spos >> 3),
 				oubt = 0;
-			let lst = toSigned(toSigned(rb(dat, cbt, 2) >> toSigned(spos & 7)) & ((toSigned(1 << llt.b) - 1)));
-			cbt = toSigned((spos -= oct.b) >> 3);
-			let ost = toSigned(toSigned(rb(dat, cbt, 2) >> toSigned(spos & 7)) & ((toSigned(1 << oct.b) - 1)));
-			cbt = toSigned((spos -= mlt.b) >> 3);
-			let mst = toSigned(toSigned(rb(dat, cbt, 2) >> toSigned(spos & 7)) & ((toSigned(1 << mlt.b) - 1)));
+			let lst = ((rb(dat, cbt, 2) >> (spos & 7)) & (((1 << llt.b) - 1)));
+			cbt = ((spos -= oct.b) >> 3);
+			let ost = ((rb(dat, cbt, 2) >> (spos & 7)) & (((1 << oct.b) - 1)));
+			cbt = ((spos -= mlt.b) >> 3);
+			let mst = ((rb(dat, cbt, 2) >> (spos & 7)) & (((1 << mlt.b) - 1)));
 			ns++;
 			while (--ns) {
 				const llc = llt.s[lst];
@@ -878,30 +879,30 @@ const rzb = (dat: Uint8Array, st: DZstdState, out ? : Uint8Array) => {
 				const ofc = oct.s[ost];
 				const obtr = oct.n[ost];
 
-				cbt = toSigned((spos -= ofc) >> 3);
-				const ofp = toSigned(1 << ofc);
-				let off = toSigned(ofp + toSigned((rb(dat, cbt, 4) >>> toSigned(spos & 7)) & (ofp - 1)));
-				cbt = toSigned((spos -= mlb[mlc]) >> 3);
-				let ml = toSigned(mlbl[mlc] + toSigned((rb(dat, cbt, 3) >> toSigned(spos & 7)) & ((toSigned(1 << mlb[mlc]) - 1))));
-				cbt = toSigned((spos -= llb[llc]) >> 3);
-				const ll = toSigned(llbl[llc] + toSigned((rb(dat, cbt, 3) >> toSigned(spos & 7)) & ((toSigned(1 << llb[llc]) - 1))));
+				cbt = ((spos -= ofc) >> 3);
+				const ofp = (1 << ofc);
+				let off = (ofp + ((rb(dat, cbt, 4) >>> (spos & 7)) & (ofp - 1)));
+				cbt = ((spos -= mlb[mlc]) >> 3);
+				let ml = (mlbl[mlc] + ((rb(dat, cbt, 3) >> (spos & 7)) & (((1 << mlb[mlc]) - 1))));
+				cbt = ((spos -= llb[llc]) >> 3);
+				const ll = (llbl[llc] + ((rb(dat, cbt, 3) >> (spos & 7)) & (((1 << llb[llc]) - 1))));
 
-				cbt = toSigned((spos -= lbtr) >> 3);
-				lst = toSigned(llt.t[lst] + toSigned((rb(dat, cbt, 2) >> toSigned(spos & 7)) & ((toSigned(1 << lbtr) - 1))));
-				cbt = toSigned((spos -= mbtr) >> 3);
-				mst = toSigned(mlt.t[mst] + toSigned((rb(dat, cbt, 2) >> toSigned(spos & 7)) & ((toSigned(1 << mbtr) - 1))));
-				cbt = toSigned((spos -= obtr) >> 3);
-				ost = toSigned(oct.t[ost] + toSigned((rb(dat, cbt, 2) >> toSigned(spos & 7)) & ((toSigned(1 << obtr) - 1))));
+				cbt = ((spos -= lbtr) >> 3);
+				lst = (llt.t[lst] + ((rb(dat, cbt, 2) >> (spos & 7)) & (((1 << lbtr) - 1))));
+				cbt = ((spos -= mbtr) >> 3);
+				mst = (mlt.t[mst] + ((rb(dat, cbt, 2) >> (spos & 7)) & (((1 << mbtr) - 1))));
+				cbt = ((spos -= obtr) >> 3);
+				ost = (oct.t[ost] + ((rb(dat, cbt, 2) >> (spos & 7)) & (((1 << obtr) - 1))));
 
-				if (toSigned(off) > 3) {
+				if ((off) > 3) {
 					st.o[2] = st.o[1];
 					st.o[1] = st.o[0];
-					st.o[0] = toSigned(off -= 3);
+					st.o[0] = (off -= 3);
 				} else {
-					const idx = toSigned(off - (toSigned(ll) !== 0 ? 1 : 0));
-					if (toSigned(idx)) {
-						off = toSigned(tonumber(idx) === 3 ? st.o[0] - 1 : st.o[idx]);
-						if (toSigned(idx) > 1) st.o[2] = st.o[1];
+					const idx = (off - ((ll) !== 0 ? 1 : 0));
+					if ((idx)) {
+						off = (tonumber(idx) === 3 ? st.o[0] - 1 : st.o[idx]);
+						if ((idx) > 1) st.o[2] = st.o[1];
 						st.o[1] = st.o[0];
 						st.o[0] = off;
 					} else off = st.o[0];
@@ -911,11 +912,11 @@ const rzb = (dat: Uint8Array, st: DZstdState, out ? : Uint8Array) => {
 				}
 
 				oubt += ll, spl += ll;
-				let stin = toSigned(oubt - off);
+				let stin = (oubt - off);
 				if (stin < 0) {
 					let len = -stin;
-					const bs = toSigned(st.e + stin);
-					if (toSigned(len) > ml) len = ml;
+					const bs = (st.e + stin);
+					if ((len) > ml) len = ml;
 					for (const i of $range(0, len - 1)) {
 						buf[oubt + i] = st.w[bs + i];
 					}
@@ -926,7 +927,7 @@ const rzb = (dat: Uint8Array, st: DZstdState, out ? : Uint8Array) => {
 				}
 				oubt += ml;
 			}
-			if (toSigned(oubt) !== toSigned(spl)) {
+			if ((oubt) !== (spl)) {
 				while (spl < getn(buf)) {
 					buf[oubt++] = buf[spl++];
 				}
@@ -970,7 +971,7 @@ const cct = (bufs: Uint8Array[], ol: number) => {
  *            it will yield better performance.
  * @returns The decompressed data
  */
-export function decompress(data: buffer, decompressedSize? : number, dictionary?: buffer) {
+export function decompress(data: buffer, decompressedSize ? : number, dictionary ? : buffer) {
 	if (!typeIs(data, "buffer")) throw "expected buffer";
 	const dic = typeIs(dictionary, "buffer") ? new u8(dictionary) : undefined;
 	let buf = typeIs(decompressedSize, "number") ? new u8(decompressedSize) : undefined;
@@ -1005,7 +1006,7 @@ export function decompress(data: buffer, decompressedSize? : number, dictionary?
 					st.w.set(blk, getn(st.w) - getn(blk));
 				}
 			}
-			bt = toSigned(st.b + toSigned(st.c * 4));
+			bt = (st.b + (st.c * 4));
 		} else bt = st as number;
 		dat = dat.subarray(bt);
 	}
@@ -1018,120 +1019,188 @@ export function decompress(data: buffer, decompressedSize? : number, dictionary?
  * @param data The data that was (de)compressed
  * @param final Whether this is the last chunk in the stream
  */
-export type ZstdStreamHandler = (data: Uint8Array, final?: boolean) => unknown;
+export type ZstdStreamHandler = (data: Uint8Array, final ? : boolean) => unknown;
 
 /**
  * Decompressor for Zstandard streamed data
  */
 export class Decompress {
-  private s!: DZstdState | number;
-  private c: Uint8Array[];
-  private l: number;
-  private z: number;
-  private d!: Uint8Array;
-  /**
-   * Creates a Zstandard decompressor
-   * @param ondata The handler for stream data
-   */
-  constructor(ondata: ZstdStreamHandler) {
-    this.ondata = ondata;
-    this.c = [];
-    this.l = 0;
-    this.z = 0;
-  }
+	private s!: DZstdState | number;
+	private c: Uint8Array[];
+	private l: number;
+	private z: number;
+	private d!: Uint8Array;
+	/**
+	 * Creates a Zstandard decompressor
+	 * @param ondata The handler for stream data
+	 */
+	constructor(ondata: ZstdStreamHandler) {
+		this.ondata = ondata;
+		this.c = [];
+		this.l = 0;
+		this.z = 0;
+	}
 
-  /**
-   * Loads a dictionary
-   * @param dic The dictionary buffer. May be a Zstandard-formatted dictionary
-   *            (as generated by zstd --train) or raw content.
-   */
-  loadDictionary(dic: buffer) {
-	if (!typeIs(dic, "buffer")) throw "expected buffer";
-    this.d = new u8(dic);
-  }
+	/**
+	 * Loads a dictionary
+	 * @param dic The dictionary buffer. May be a Zstandard-formatted dictionary
+	 *            (as generated by zstd --train) or raw content.
+	 */
+	loadDictionary(dic: buffer) {
+		if (!typeIs(dic, "buffer")) throw "expected buffer";
+		this.d = new u8(dic);
+	}
 
-  /**
-   * Pushes data to be decompressed
-   * @param chunk The chunk of data to push
-   * @param final Whether or not this is the last chunk in the stream
-   */
-  push(buf: buffer, final?: boolean): undefined {
-	if (!typeIs(buf, "buffer")) throw "expected buffer";
-	let chunk = new u8(buf);
-    if (typeIs(this.s, 'number')) {
-      const sub = math.min(getn(chunk), this.s as number);
-      chunk = chunk.subarray(sub);
-      (this.s as number) -= sub;
-    }
-    const sl = getn(chunk);
-    const ncs = sl + this.l;
-    if (!this.s) {
-      if (final) {
-        if (!ncs) {
-          this.ondata(new u8(0), true);
-          return;
-        }
-        // min for frame + one block
-        if (ncs < 5) throw 'unexpected EOF';
-      } else if (ncs < 18) {
-        this.c.push(chunk);
-        this.l = ncs;
-        return;
-      }
-      if (this.l) {
-        this.c.push(chunk);
-        chunk = cct(this.c, ncs);
-        this.c = [];
-        this.l = 0;
-      }
-      if (typeIs((this.s = rzfh(chunk)), 'number')) return this.push(toBuffer(chunk), final);
-      if (this.s.d && !this.d) throw 'wrong dictionary';
-      if (this.d) rdic(this.d, this.s);
-    }
-    if (!typeIs(this.s, 'number')) {
-      if (ncs < (this.z || 3)) {
-        if (final) throw 'unexpected EOF';
-        this.c.push(chunk);
-        this.l = ncs;
-        return;
-      }
-      if (this.l) {
-        this.c.push(chunk);
-        chunk = cct(this.c, ncs);
-        this.c = [];
-        this.l = 0;
-      }
-      if (!this.z && ncs < (this.z = (chunk[(this.s as DZstdState).b] & 2) ? 4 : 3 + ((chunk[(this.s as DZstdState).b] >> 3) | (chunk[(this.s as DZstdState).b + 1] << 5) | (chunk[(this.s as DZstdState).b + 2] << 13)))) {
-        if (final) throw 'unexpected EOF';
-        this.c.push(chunk);
-        this.l = ncs;
-        return;
-      } else this.z = 0;
-      while (true) {
-        const blk = rzb(chunk, this.s as DZstdState);
-        if (!blk) {
-          if (final) throw 'unexpected EOF';
-          const adc = chunk.subarray((this.s as DZstdState).b);
-          (this.s as DZstdState).b = 0;
-          this.c.push(adc), this.l += getn(adc);
-          return;
-        } else {
-          this.ondata(blk, false);
-          (this.s as DZstdState).w.copyWithin(0, getn(blk));
-          (this.s as DZstdState).w.set(blk, getn((this.s as DZstdState).w) - getn(blk));
-        }
-        if ((this.s as DZstdState).l) {
-          const rest = chunk.subarray((this.s as DZstdState).b);
-          this.s = (this.s as DZstdState).c * 4;
-          this.push(toBuffer(rest), final);
-          return;
-        }
-      }
-    } else if (final) throw 'unexpected EOF';
-  }
+	/**
+	 * Pushes data to be decompressed
+	 * @param chunk The chunk of data to push
+	 * @param final Whether or not this is the last chunk in the stream
+	 */
+	push(buf: buffer, final ? : boolean): undefined {
+		if (!typeIs(buf, "buffer")) throw "expected buffer";
+		let chunk = new u8(buf);
+		if (typeIs(this.s, 'number')) {
+			const sub = math.min(getn(chunk), this.s as number);
+			chunk = chunk.subarray(sub);
+			(this.s as number) -= sub;
+		}
+		const sl = getn(chunk);
+		const ncs = sl + this.l;
+		if (!this.s) {
+			if (final) {
+				if (!ncs) {
+					this.ondata(new u8(0), true);
+					return;
+				}
+				// min for frame + one block
+				if (ncs < 5) throw 'unexpected EOF';
+			} else if (ncs < 18) {
+				this.c.push(chunk);
+				this.l = ncs;
+				return;
+			}
+			if (this.l) {
+				this.c.push(chunk);
+				chunk = cct(this.c, ncs);
+				this.c = [];
+				this.l = 0;
+			}
+			if (typeIs((this.s = rzfh(chunk)), 'number')) return this.push(toBuffer(chunk), final);
+			if (this.s.d && !this.d) throw 'wrong dictionary';
+			if (this.d) rdic(this.d, this.s);
+		}
+		if (!typeIs(this.s, 'number')) {
+			if (ncs < (this.z || 3)) {
+				if (final) throw 'unexpected EOF';
+				this.c.push(chunk);
+				this.l = ncs;
+				return;
+			}
+			if (this.l) {
+				this.c.push(chunk);
+				chunk = cct(this.c, ncs);
+				this.c = [];
+				this.l = 0;
+			}
+			if (!this.z && ncs < (this.z = (chunk[(this.s as DZstdState).b] & 2) ? 4 : 3 + ((chunk[(this.s as DZstdState).b] >> 3) | (chunk[(this.s as DZstdState).b + 1] << 5) | (chunk[(this.s as DZstdState).b + 2] << 13)))) {
+				if (final) throw 'unexpected EOF';
+				this.c.push(chunk);
+				this.l = ncs;
+				return;
+			} else this.z = 0;
+			while (true) {
+				const blk = rzb(chunk, this.s as DZstdState);
+				if (!blk) {
+					if (final) throw 'unexpected EOF';
+					const adc = chunk.subarray((this.s as DZstdState).b);
+					(this.s as DZstdState).b = 0;
+					this.c.push(adc), this.l += getn(adc);
+					return;
+				} else {
+					this.ondata(blk, false);
+					(this.s as DZstdState).w.copyWithin(0, getn(blk));
+					(this.s as DZstdState).w.set(blk, getn((this.s as DZstdState).w) - getn(blk));
+				}
+				if ((this.s as DZstdState).l) {
+					const rest = chunk.subarray((this.s as DZstdState).b);
+					this.s = (this.s as DZstdState).c * 4;
+					this.push(toBuffer(rest), final);
+					return;
+				}
+			}
+		} else if (final) throw 'unexpected EOF';
+	}
 
-  /**
-   * Handler called whenever data is decompressed
-   */
-  ondata: ZstdStreamHandler;
+	/**
+	 * Handler called whenever data is decompressed
+	 */
+	ondata: ZstdStreamHandler;
 }
+
+/* example
+const dictionaryBytes = [
+	0x37, 0xa4, 0x30, 0xec, 0x33, 0x4b, 0xd1, 0x42, 0x2a, 0x10, 0xc8, 0x92,
+	0x24, 0x1d, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xbf, 0x6c, 0x26, 0x52,
+	0x6e, 0xd9, 0xc8, 0x96, 0xb7, 0x41, 0xd2, 0x36, 0x2b, 0xf7, 0x86, 0xf9,
+	0x7f, 0x1a, 0xa9, 0x95, 0x45, 0xa1, 0xcf, 0xc6, 0xf3, 0xed, 0xe5, 0x7a,
+	0x55, 0xc6, 0x01, 0x03, 0x00, 0x00, 0x60, 0x90, 0xe0, 0x40, 0x32, 0xcb,
+	0xde, 0x02, 0x00, 0x00, 0x24, 0xa0, 0xd0, 0x8e, 0x0c, 0x8b, 0x09, 0x08,
+	0x87, 0x69, 0x10, 0x03, 0x19, 0x42, 0x0c, 0x21, 0x84, 0x10, 0x43, 0x08,
+	0x21, 0x84, 0x10, 0x42, 0x08, 0x21, 0x64, 0xd2, 0x88, 0x88, 0x24, 0x49,
+	0x92, 0x0e, 0x04, 0x69, 0x64, 0xc2, 0xc5, 0xc3, 0xa2, 0x22, 0xd1, 0x54,
+	0x10, 0x10, 0xc7, 0x82, 0x2c, 0x12, 0x52, 0x50, 0x4a, 0xa7, 0x6c, 0x24,
+	0x49, 0x92, 0x0e, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x08,
+	0x00, 0x00, 0x00, 0x73, 0x20, 0x61, 0x75, 0x63, 0x74, 0x6f, 0x72, 0x20,
+	0x65, 0x20, 0x65, 0x74, 0x20, 0x65, 0x66, 0x66, 0x69, 0x63, 0x69, 0x74,
+	0x75, 0x72, 0x20, 0x64, 0x75, 0x69, 0x20, 0x65, 0x6c, 0x65, 0x6d, 0x65,
+	0x6e, 0x74, 0x75, 0x6d, 0x20, 0x61, 0x74, 0x2e, 0x20, 0x50, 0x68, 0x61,
+	0x73, 0x65, 0x6c, 0x6c, 0x75, 0x73, 0x20, 0x61, 0x6c, 0x69, 0x71, 0x75,
+	0x65, 0x74, 0x20, 0x65, 0x73, 0x75, 0x61, 0x64, 0x61, 0x20, 0x66, 0x61,
+	0x6d, 0x65, 0x73, 0x20, 0x61, 0x63, 0x20, 0x74, 0x75, 0x72, 0x70, 0x69,
+	0x73, 0x20, 0x65, 0x67, 0x65, 0x73, 0x74, 0x61, 0x73, 0x2e, 0x20, 0x41,
+	0x6c, 0x69, 0x71, 0x75, 0x61, 0x6d, 0x20, 0x66, 0x61, 0x63, 0x69, 0x6c,
+	0x69, 0x73, 0x69, 0x73, 0x20, 0x6c, 0x20, 0x6c, 0x6f, 0x62, 0x6f, 0x72,
+	0x74, 0x69, 0x73, 0x20, 0x69, 0x70, 0x73, 0x75, 0x6d, 0x2e, 0x20, 0x53,
+	0x75, 0x73, 0x70, 0x65, 0x6e, 0x64, 0x69, 0x73, 0x73, 0x65, 0x20, 0x70,
+	0x6f, 0x72, 0x74, 0x74, 0x69, 0x74, 0x6f, 0x72, 0x2c, 0x20, 0x6c, 0x69,
+	0x67, 0x75, 0x6c, 0x61, 0x20, 0x61, 0x20, 0x61, 0x63, 0x75, 0x6c, 0x69,
+	0x73, 0x20, 0x6c, 0x61, 0x63, 0x75, 0x73, 0x20, 0x75, 0x74, 0x2c, 0x20,
+	0x62, 0x6c, 0x61, 0x6e, 0x64, 0x69, 0x74, 0x20, 0x70, 0x75, 0x72, 0x75,
+	0x73, 0x2e, 0x20, 0x4d, 0x61, 0x65, 0x63, 0x65, 0x6e, 0x61, 0x73, 0x20,
+	0x73, 0x69, 0x74, 0x20, 0x61, 0x6d, 0x65, 0x74, 0x20, 0x6e, 0x74, 0x20,
+	0x6d, 0x6f, 0x72, 0x62, 0x69, 0x20, 0x74, 0x72, 0x69, 0x73, 0x74, 0x69,
+];
+const data = [
+	0x28, 0xb5, 0x2f, 0xfd, 0x03, 0x68, 0x33, 0x4b, 0xd1, 0x42, 0x65, 0x02,
+	0x00, 0xa3, 0x05, 0x0d, 0x07, 0xbb, 0x82, 0xfa, 0x96, 0xdb, 0x4a, 0x5d,
+	0x73, 0xbf, 0xd6, 0x6e, 0x7d, 0x69, 0xa9, 0x14, 0x5b, 0x3b, 0x7e, 0x4e,
+	0xb7, 0xbf, 0xb0, 0x1d, 0xa1, 0x7e, 0x9d, 0x52, 0xcd, 0xe3, 0x87, 0x53,
+	0xe1, 0x29, 0x9a, 0xa8, 0x25, 0x93, 0xe9, 0x90, 0x11, 0x36, 0x65, 0xe8,
+	0xcb, 0x32, 0xc5, 0xd2, 0x17, 0x2e, 0x13, 0x42, 0x08, 0xfc, 0x1e, 0x33,
+	0xa8, 0xac, 0xa2, 0x97, 0x18, 0xfe, 0x6e, 0xde, 0xf4, 0x34, 0xd8, 0xbc,
+	0x89, 0x4f, 0x51, 0xe7, 0x0b,
+];
+const compressed = new Uint8Array(data).buffer;
+const dictionary = new Uint8Array(dictionaryBytes).buffer;
+const expected =
+	"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam nec sem urna. Morbi mollis, massa a convallis iaculis, mauris neque.";
+{
+	const decompressed = decompress(compressed, undefined, dictionary);
+	const shouldBeLoremIpsum = buffer.tostring(decompressed);
+	assert(expected === shouldBeLoremIpsum);
+} {
+	let outputChunks: Uint8Array[] = [];
+	const decompressor = new Decompress(data => outputChunks.push(data));
+	decompressor.loadDictionary(dictionary);
+	decompressor.push(compressed, true);
+	let output = new Uint8Array(
+		outputChunks.reduce((acc, cur) => acc + cur.byteLength, 0),
+	);
+	for (let i = 0, offset = 0; i < getn(outputChunks); i++) {
+		output.set(outputChunks[i], offset);
+		offset += getn(outputChunks[i]);
+	}
+	let shouldBeLoremIpsum = buffer.tostring(toBuffer(output));
+	assert(expected === shouldBeLoremIpsum);
+}
+*/

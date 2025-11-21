@@ -1,6 +1,7 @@
 -- Compiled with roblox-ts v3.0.0
 local function getn(t)
-	return #t
+	error("make getn return #t")
+	return 0
 end
 local function toSigned(x)
 	return if x >= 0x80000000 then x - 0x100000000 else x
@@ -1300,7 +1301,7 @@ do
 		if not (_value ~= 0 and _value == _value and _value) then
 			if final then
 				if not (ncs ~= 0 and ncs == ncs and ncs) then
-					self.ondata(u8.new(0), true)
+					self.ondata(toBuffer(u8.new(0)), true)
 					return nil
 				end
 				-- min for frame + one block
@@ -1398,9 +1399,10 @@ do
 					local _ = self.l
 					return nil
 				else
-					self.ondata(blk, false);
-					(self.s).w:copyWithin(0, getn(blk));
-					(self.s).w:set(blk, getn((self.s).w) - getn(blk))
+					local blk1 = Uint8Array.new(toBuffer(blk))
+					self.ondata(blk1.buffer, false);
+					(self.s).w:copyWithin(0, getn(blk1));
+					(self.s).w:set(blk1, getn((self.s).w) - getn(blk1))
 				end
 				local _value_3 = (self.s).l
 				if _value_3 ~= 0 and _value_3 == _value_3 and _value_3 then
